@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOS LaunchAgent (runs as your user, so it inherits your Bluetooth
+  permission grant). Install to ~/Library/LaunchAgents/ and load with:
+    launchctl load -w ~/Library/LaunchAgents/dev.thermorinter.daemon.plist
+  Edit ProgramArguments (binary path, --device, --addr) before loading.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>dev.thermorinter.daemon</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/thermorinterd</string>
+    <string>serve</string>
+    <string>--addr</string>
+    <string>127.0.0.1:9100</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/tmp/thermorinterd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/thermorinterd.err.log</string>
+</dict>
+</plist>

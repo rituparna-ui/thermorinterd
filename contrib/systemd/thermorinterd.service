@@ -1,0 +1,19 @@
+[Unit]
+Description=thermorinterd — BLE cat-printer print service
+Documentation=https://github.com/your/thermorinterd
+After=bluetooth.target network.target
+Wants=bluetooth.target
+
+[Service]
+Type=simple
+# Adjust the device hint and bind address as needed.
+ExecStart=/usr/local/bin/thermorinterd serve --addr 0.0.0.0:9100
+Restart=on-failure
+RestartSec=3
+# Needs access to BlueZ over D-Bus; running as a normal user in the 'bluetooth'
+# group is usually sufficient on Linux.
+# User=thermo
+# Group=bluetooth
+
+[Install]
+WantedBy=multi-user.target

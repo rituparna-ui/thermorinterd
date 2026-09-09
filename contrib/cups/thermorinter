@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+#
+# CUPS backend for thermorinterd. Install to /usr/lib/cups/backend/thermorinter
+# (mode 0755, root-owned). Paired with thermorinter.ppd, CUPS converts any
+# document to PDF and hands it to this backend, which forwards it to the
+# thermorinterd HTTP service (/print/pdf), reusing the daemon's renderer.
+#
+# Device URI: thermorinter://HOST:PORT   (default 127.0.0.1:9100)
+# Override target explicitly with THERMORINTER_URL=http://host:port
+#
+# CUPS backend contract:
+#   - no args   -> print a discovery line and exit
+#   - with args -> argv: job-id user title copies options [file]; job data on
+#                  stdin (or the file argument). Log INFO:/ERROR: to stderr.
+set -euo pipefail
+
+if [ "$#" -eq 0 ]; then
+  echo 'direct thermorinter "Unknown" "Thermorinter Cat Printer" "MFG:thermorinter;MDL:Cat;"'
+  exit 0
+fi
+
+DEVICE_URI="${DEVICE_URI:-thermorinter://127.0.0.1:9100}"
+HOSTPORT="${DEVICE_URI#thermorinter://}"
+HOSTPORT="${HOSTPORT%%/*}"
+URL="${THERMORINTER_URL:-http://${HOSTPORT}}"
+
+TMP="$(mktemp)"
+trap 'rm -f "$TMP"' EXIT
+if [ "$#" -ge 6 ] && [ -f "${6:-}" ]; then
+  cat "$6" > "$TMP"
+else
+  cat > "$TMP"
+fi
+
+if [ ! -s "$TMP" ]; then
+  echo "ERROR: empty job" >&2
+  exit 1
+fi
+
+# Detect content: PDF (magic %PDF) vs raster image.
+if head -c 5 "$TMP" | grep -q '%PDF'; then
+  endpoint="$URL/print/pdf"
+  ctype="application/pdf"
+else
+  endpoint="$URL/print/image"
+  ctype="application/octet-stream"
+fi
+
+echo "INFO: forwarding $(wc -c < "$TMP") bytes to $endpoint" >&2
+if curl -fsS --max-time 120 -X POST "$endpoint" \
+      -H "content-type: $ctype" --data-binary @"$TMP" >&2; then
+  echo "INFO: thermorinter job sent" >&2
+  exit 0
+else
+  echo "ERROR: thermorinterd request failed (is the daemon running at $URL?)" >&2
+  exit 1
+fi

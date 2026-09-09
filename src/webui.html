@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>thermorinterd</title>
+    <style>
+      body { font: 15px system-ui, sans-serif; max-width: 680px; margin: 2rem auto; padding: 0 1rem; color: #111; }
+      h1 { font-size: 1.3rem; }
+      fieldset { border: 1px solid #ccc; border-radius: 8px; margin-bottom: 1rem; }
+      legend { font-weight: 600; }
+      button { padding: .5rem .9rem; margin: .2rem; border-radius: 6px; border: 1px solid #999; background: #f6f6f6; cursor: pointer; }
+      button.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+      textarea, input[type=text], input[type=number] { padding: .35rem; border: 1px solid #bbb; border-radius: 6px; box-sizing: border-box; }
+      textarea, input[type=text] { width: 100%; }
+      .row { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; margin: .3rem 0; }
+      label { font-size: 13px; }
+      #log { background: #111; color: #0f0; padding: .6rem; border-radius: 6px; height: 150px; overflow: auto; white-space: pre-wrap; font: 12px ui-monospace, monospace; }
+      #state { font-size: 13px; color: #555; }
+    </style>
+  </head>
+  <body>
+    <h1>🐱🖨 thermorinterd</h1>
+    <p id="state">checking…</p>
+
+    <fieldset>
+      <legend>Text</legend>
+      <textarea id="text" rows="3">Hello from thermorinterd!</textarea>
+      <div class="row">
+        <label>Font <input id="font" type="number" value="28" style="width:4rem" /></label>
+        <label>Align
+          <select id="align"><option>left</option><option>center</option><option>right</option></select>
+        </label>
+        <button class="primary" onclick="printText()">Print Text</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>QR</legend>
+      <div class="row"><input id="qr" type="text" value="https://example.com" /></div>
+      <div class="row">
+        <label>Caption <input id="qrcap" type="text" style="width:12rem" /></label>
+        <button class="primary" onclick="printQr()">Print QR</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Image / PDF</legend>
+      <div class="row">
+        <input id="file" type="file" accept="image/*,application/pdf" />
+        <label><input id="dither" type="checkbox" checked /> Dither</label>
+        <button class="primary" onclick="printFile()">Print File</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Paper &amp; darkness</legend>
+      <div class="row">
+        <label>Darkness <input id="energy" type="number" value="12288" style="width:6rem" /></label>
+        <label>Feed <input id="feed" type="number" value="80" style="width:5rem" /></label>
+        <button onclick="feed()">Feed</button>
+        <button onclick="refreshStatus()">Status</button>
+      </div>
+    </fieldset>
+
+    <fieldset><legend>Log</legend><div id="log"></div></fieldset>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const log = (m) => { const l = $("log"); l.textContent += m + "\n"; l.scrollTop = l.scrollHeight; };
+      const energy = () => Number($("energy").value) || 12288;
+      const feedN = () => Number($("feed").value) || 0;
+
+      async function post(path, opts) {
+        try {
+          const r = await fetch(path, opts);
+          const t = await r.text();
+          log(`${path} → ${r.status} ${t}`);
+        } catch (e) { log(`${path} ✗ ${e}`); }
+      }
+      const json = (body) => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+      function printText() {
+        post("/print/text", json({ text: $("text").value, font_size: Number($("font").value) || 28, align: $("align").value, energy: energy(), feed: feedN() }));
+      }
+      function printQr() {
+        post("/print/qr", json({ data: $("qr").value, caption: $("qrcap").value, energy: energy(), feed: feedN() }));
+      }
+      function feed() { post("/feed", json({ lines: feedN() })); }
+      async function printFile() {
+        const f = $("file").files?.[0];
+        if (!f) return log("choose a file first");
+        const isPdf = f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf");
+        const path = (isPdf ? "/print/pdf?" : "/print/image?") + new URLSearchParams({ dither: $("dither").checked ? "1" : "0", energy: energy(), feed: feedN() });
+        const buf = new Uint8Array(await f.arrayBuffer());
+        post(path, { method: "POST", headers: { "content-type": isPdf ? "application/pdf" : "application/octet-stream" }, body: buf });
+      }
+      async function refreshStatus() {
+        try {
+          const s = await (await fetch("/status")).json();
+          $("state").textContent = `firmware ${s.firmware ?? "?"} · state ${s.state_raw ?? "?"} · battery ${s.battery ?? "n/a"}`;
+          log("status: " + JSON.stringify(s));
+        } catch (e) { $("state").textContent = "status error: " + e; }
+      }
+      fetch("/health").then((r) => r.text()).then((t) => ($("state").textContent = "daemon: " + t)).catch(() => ($("state").textContent = "daemon unreachable"));
+    </script>
+  </body>
+</html>
